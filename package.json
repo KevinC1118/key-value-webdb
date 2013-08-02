@@ -1,0 +1,15 @@
+{
+    "name": "key-value-webdb",
+    "version": "0.0.1",
+    "description": "Key-value webdb for browser, compatible with indexeddb and websql.",
+    "license": "MIT",
+    "author": {
+        "name": "Kevin Chiu",
+        "url": "http://korprulu.blogspot.tw"
+    },
+    "homepage": "https://github.com/KevinC1118/key-value-webdb",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/KevinC1118/key-value-webdb.git"
+    }
+}
