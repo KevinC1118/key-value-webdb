@@ -16,6 +16,13 @@
 
     _CACHE = {}
 
+    defaultConfig =
+        type: null
+        version: '1'
+        storeName: 'webdb'
+        blob: false
+        size: 5 * 1024 * 1024  # option, required by websql
+
     globalDBConfig =
         type: null
         version: 1
@@ -31,6 +38,66 @@
         globalDBConfig.type = 'websql'
 
     if globalDBConfig.type is null then return
+
+    class DBBase
+        constructor: (@options) ->
+        open: ->
+        create: ->
+        create: ->
+        update: ->
+        read: ->
+        readAll: ->
+        remove: ->
+        clear: ->
+        _toObject: ->
+            if @config.blob
+                return {id: arguments[1], blob: arguments[0]}
+            else
+                try
+                    return JSON.parse(arguments[0])
+                catch e
+                    return record
+
+    class WebSQL extends DBBase
+        open: ->
+            config = @config
+            dbName = config.dbName
+            storeName = config.storeName
+            version = config.version
+            maxsize = 1024 * 1024 * 50  # 50MB
+            dtd = $.Deferred()
+
+            try
+                db = openDatabase(dbName, version, dbName, maxsize)
+            catch e
+                if e.name is "SECURITY_ERR"
+                    db = openDatabase(dbName, "", dbName, 1024 * 1024 * 20)
+                else
+                    throw e
+            finally
+                # On android 2.x, openDatabase return null instead of throw quote exceed exception.
+                if db is null
+                    db = openDatabase(dbName, '', dbName, 1024 * 1024 * 5)
+
+                if db is null
+                    console.log('db is null')
+                    setTimeout(
+                        -> dtd.reject()
+                        0
+                    )
+                    return dtd
+
+            db.transaction (transaction) ->
+                transaction.executeSql(
+                    "CREATE TABLE IF NOT EXISTS #{storeName} (id TEXT PRIMARY KEY, data);"
+                    []
+                    ->
+                        dtd.resolve(db)
+                    (_t, e) ->
+                        console.log(e.stack)
+                )
+                
+            return dtd
 
     open =
         websql: (config) ->
