@@ -4,613 +4,438 @@
 ((root, factory) ->
 
     if typeof define is 'function' and define.amd
-        define ['modernizr'], factory
+        define ['dbjs/defer', 'dbjs/db'], factory
     else
-        root.webDB = factory(Modernizr)
+        root.kvDB = factory(root.Deferred, root.db)
 
-)(@, (Modernizr) ->
-    # example:
-    # It mush include id property in a plain object record, for example: {id: 1, name: "John", age: 18}.
-    # There are only two properties for blob object record. For example:
-    # {id: 1, blob: blob object}
+)(@, (Deferred, DBjs) ->
 
-    _CACHE = {}
+    TYPE_INDEXEDDB = 'indexeddb'
+    TYPE_WEBSQL = 'websql'
+
+    S4 = ->
+      return Math.floor((1 + Math.random()) * 0x10000).toString(16).substring(1)
+    
+    GUID = ->
+      return "#{ s4() }#{ s4() }-#{ s4() }-#{ s4() }-#{ s4() }-#{ s4() }#{ s4() }#{ s4() }"
+
+    extend = (obj) ->
+
+        obj2 = obj
+
+        for arg in slice.call(arguments, 1)
+            do (arg) ->
+                for k, v of arg
+                    if arg.hasOwnProperty(k)
+                        obj2[k] = v
+
+                return
+
+        return obj2
+
+    slice = Array::slice
 
     defaultConfig =
-        type: null
+        id: GUID()
         version: '1'
-        storeName: 'webdb'
-        blob: false
-        size: 5 * 1024 * 1024  # option, required by websql
+        description: null
+        schema: null
+        websql:  # option, but required by websql
+            size: 5 * 1024 * 1024  # 5 MB
+        type: ( ->
+            type = window.indexedDB or window.webkitIndexedDB or window.mozIndexedDB
+            if not not type
+                return TYPE_INDEXEDDB
 
-    globalDBConfig =
-        type: null
-        version: 1
+            type = window.openDatabase
+            if not not type
+                return TYPE_WEBSQL
 
-    localDBConfig =
-        userId: ''
-        storeName: 'webapp'
-        blob: false
-
-    if Modernizr.indexeddb
-        globalDBConfig.type = 'indexeddb'
-    else if Modernizr.websqldatabase
-        globalDBConfig.type = 'websql'
-
-    if globalDBConfig.type is null then return
+            throw Error('Need IndexedDB or WebSQL supported in your browser.')
+        )()
 
     class DBBase
-        constructor: (@options) ->
-        open: ->
-        create: ->
-        create: ->
-        update: ->
-        read: ->
-        readAll: ->
-        remove: ->
-        clear: ->
-        _toObject: ->
-            if @config.blob
-                return {id: arguments[1], blob: arguments[0]}
-            else
-                try
-                    return JSON.parse(arguments[0])
-                catch e
-                    return record
+        constructor: (@config) ->
 
-    class WebSQL extends DBBase
+    class IndexedDB extends DBBase
+
         open: ->
             config = @config
-            dbName = config.dbName
-            storeName = config.storeName
-            version = config.version
-            maxsize = 1024 * 1024 * 50  # 50MB
-            dtd = $.Deferred()
-
-            try
-                db = openDatabase(dbName, version, dbName, maxsize)
-            catch e
-                if e.name is "SECURITY_ERR"
-                    db = openDatabase(dbName, "", dbName, 1024 * 1024 * 20)
-                else
-                    throw e
-            finally
-                # On android 2.x, openDatabase return null instead of throw quote exceed exception.
-                if db is null
-                    db = openDatabase(dbName, '', dbName, 1024 * 1024 * 5)
-
-                if db is null
-                    console.log('db is null')
-                    setTimeout(
-                        -> dtd.reject()
-                        0
-                    )
-                    return dtd
-
-            db.transaction (transaction) ->
-                transaction.executeSql(
-                    "CREATE TABLE IF NOT EXISTS #{storeName} (id TEXT PRIMARY KEY, data);"
-                    []
-                    ->
-                        dtd.resolve(db)
-                    (_t, e) ->
-                        console.log(e.stack)
-                )
-                
-            return dtd
-
-    open =
-        websql: (config) ->
-            dbName = config.dbName
-            storeName = config.storeName
-            maxsize = 1024 * 1024 * 50  # 50MB
-            dtd = $.Deferred()
-
-            try
-                db = openDatabase(dbName, "", dbName, maxsize)
-            catch e
-                if e.name is "SECURITY_ERR"
-                    db = openDatabase(dbName, "", dbName, 1024 * 1024 * 20)
-                else
-                    throw e
-            finally
-                # On android 2.x, openDatabase return null instead of throw quote exceed exception.
-                if db is null
-                    db = openDatabase(dbName, '', dbName, 1024 * 1024 * 5)
-
-                if db is null
-                    console.log('db is null')
-                    setTimeout(
-                        -> dtd.reject()
-                        0
-                    )
-                    return dtd
-
-            db.transaction (transaction) ->
-                transaction.executeSql(
-                    "CREATE TABLE IF NOT EXISTS #{storeName} (id TEXT PRIMARY KEY, data);"
-                    []
-                    ->
-                        dtd.resolve(db)
-                    (_t, e) ->
-                        console.log(e.stack)
-                )
-                
-            return dtd
-
-        indexeddb: (config) ->
-            mee = @
-            dtd = $.Deferred()
-            userId = config.userId
-            storeName = config.storeName
-            dbName = config.dbName
-
-            indexedDB = window.indexedDB \
-                or window.webkitIndexedDB \
-                or window.mozIndexedDB \
-                or window.msIndexedDB
-
-            window.IDBTransaction = window.IDBTransaction or window.webkitIDBTransaction
-
-            # Add username as prefix
-            req = indexedDB.open("WEBAPP-#{dbName}", globalDBConfig.version)
-
-            req.onsuccess = (evt) ->
-                db = evt.target.result
-
-                if not db.objectStoreNames.contains(storeName)
-                    verReq = db.setVersion(globalDBConfig.version)
-
-                    verReq.onsuccess = (_evt) ->
-                        db.createObjectStore(storeName)
-                        dtd.resolve(db)
-
-                    verReq.onerror = (_evt) ->
-                        console.log(_evt)
-
-                else
-                    dtd.resolve(db)
-
-            req.onerror = (evt) ->
-                console.log evt.target
-                dtd.reject()
-
-            req.onupgradeneeded = (evt) ->
-                db = evt.target.result
-                try
-                    db.deleteObjectStore(storeName)
-                catch error
-                    console.log(error)
-
-                try
-                    db.createObjectStore(storeName)
-                catch error
-                    console.log(error)
-
-            return dtd
-
-    create =
-        websql: (record) ->
-            mee = @
-            config = @config
-            db = config.db
-            dbName = config.dbName
-            storeName = config.storeName
-            dtd = $.Deferred()
-
-            if not record
-                setTimeout(
-                    -> dtd.reject()
-                    0
-                )
-                return dtd
-
-            mee.read(record.id)
-            .done (record) ->
-                dtd.resolve(record)
-
-            .fail (status) ->
-                if status?.NO_DATA
-                    db.transaction (transaction) ->
-                        
-                        data = if config.blob then record.blob else JSON.stringify(record)
-
-                        transaction.executeSql(
-                            "INSERT INTO #{storeName} (id, data) VALUES (?, ?);"
-                            [record.id, data]
-                            (_t, resultSet) ->
-                                rowsAffected = resultSet.rowsAffected
-                                if rowsAffected is 1
-                                    _CACHE[dbName][record.id] = record
-                                    dtd.resolve(record)
-                                else
-                                    console.log("Record #{record.id} not insert correctly.")
-                                    dtd.reject()
-
-                            (_t, e) ->
-                                console.log(e.stack)
-                                dtd.reject()
-                        )
-                else
-                    dtd.reject()
-
-            return dtd
-
-        indexeddb: (record) ->
-            mee = @
-            config = @config
-            db = config.db
-            storeName = config.storeName
-            dbName = config.dbName
-
-            dtd = $.Deferred()
-            if not record
-                setTimeout(
-                    -> dtd.reject()
-                    0
-                )
-                return dtd
-
-            mee.read(record.id)
-            .done (rd) ->
-                dtd.resolve(rd)
-
-            .fail (status) ->
-                if status?.NO_DATA
-                    objStor = db.transaction(storeName, IDBTransaction.READ_WRITE or 'readwrite').objectStore(storeName)
-                    data = if config.blob then record.blob else record
-                    addReq = objStor.add(data, record.id)
-                    addReq.onsuccess = (evt) ->
-                        _CACHE[dbName][record.id] = record
-                        dtd.resolve(record)
-                    addReq.onerror = (evt) ->
-                        console.log(evt)
-                        dtd.reject()
-                else
-                    dtd.reject()
-
-            return dtd
-        
-    read =
-        websql: (id) ->
-            mee = @
-            config = @config
-            db = config.db
-            dbName = config.dbName
-            storeName = config.storeName
-            dtd = $.Deferred()
-
-            if not id
-                setTimeout(
-                    -> dtd.reject()
-                    0
-                )
-                return dtd
-
-            record = _CACHE[dbName][id]
-            if record
-                setTimeout(
-                    -> dtd.resolve(record)
-                    0
-                )
-                return dtd
-
-            db.transaction (transaction) ->
-                transaction.executeSql(
-                    "SELECT * FROM #{storeName} WHERE id=?;"
-                    [id]
-                    (_t, rs) ->
-                        rows = rs.rows
-                        if rows.length is 0
-                            dtd.reject({'NO_DATA': true})
-                        else
-                            record = rows.item(0)
-                            record = mee._convertToObject(record.data, record.id)
-                            _CACHE[dbName][record.id] = record
-                            dtd.resolve(record)
-                    (_t, e) ->
-                        console.log(e.stack)
-                        dtd.reject()
-                )
-
-            return dtd
-
-        indexeddb: (id) ->
-            mee = @
-            config = @config
-            db = config.db
-            storeName = config.storeName
-            dbName = config.dbName
-
-            dtd = $.Deferred()
-
-            if not id
-                setTimeout(
-                    -> dtd.reject()
-                    0
-                )
-                return dtd
-
-            record = _CACHE[dbName][id]
-            if record
-                setTimeout(
-                    -> dtd.resolve record
-                    0
-                )
-                return dtd
-
-            objStor = db.transaction(storeName, IDBTransaction.READ_ONLY or 'readonly').objectStore(storeName)
-            getReq = objStor.get(id)
-            getReq.onsuccess = (evt) ->
-                rd = evt.target.result
-                if rd
-                    rd = mee._convertToObject(rd, id)
-                    _CACHE[dbName][id] = rd
-                    dtd.resolve(rd)
-                else
-                    dtd.reject({'NO_DATA': true})
-            getReq.onerror = (evt) ->
-                console.log(evt)
-                dtd.reject()
-
-            return dtd
-
-    readAll =
-        websql: ->
-            mee = @
-            config = @config
-            db = config.db
-            dbName = config.dbName
-            storeName = config.storeName
-            dtd = $.Deferred()
-
-            result = new Array()
-
-            db.transaction (transaction) ->
-                transaction.executeSql(
-                    "SELECT * FROM #{storeName};"
-                    []
-                    (_t, resultSet) ->
-                        rows = resultSet.rows
-                        for i in [0...rows.length]
-                            record = rows.item(i)
-                            record = mee._convertToObject(record.data, record.id)
-                            _CACHE[dbName][record.id] = record
-                            result.push(record)
-                        
-                        dtd.resolve(result)
-                    (_t, e) ->
-                        console.log(e.stack)
-                        dtd.reject()
-                )
-
-            return dtd
-
-        indexeddb: ->
-            mee = @
-            config = @config
-            db = config.db
-            storeName = config.storeName
-            dbName = config.dbName
-
-            dtd = $.Deferred()
-            result = new Array()
-
-            objStor = db.transaction(storeName, IDBTransaction.READ_ONLY or 'readonly').objectStore(storeName)
-            cursorReq = objStor.openCursor()
-            cursorReq.onsuccess = (event) ->
-                cursor = event.target.result
-                if cursor
-                    record = cursor.value
-                    record = mee._convertToObject(record, record.id)
-                    result.push(record)
-                    _CACHE[dbName][record.id] = record
-                    cursor.continue()
-                else
-                    dtd.resolve(result)
-
-            cursorReq.onerror = (evt) ->
-                console.log(evt)
-                dtd.reject()
-
-            return dtd
-
-    update =
-        websql: (record) ->
-            mee = @
-            config = @config
-            db = config.db
-            dbName = config.dbName
-            storeName = config.storeName
-            dtd = $.Deferred()
-
-            if not record
-                setTimeout(
-                    -> dtd.reject()
-                    0
-                )
-                return dtd
-
-            db.transaction (transaction) ->
-                data = if config.blob then record.blob else JSON.stringify(record)
-                transaction.executeSql(
-                    "UPDATE #{storeName} SET data=? WHERE id=?;"
-                    [data, record.id]
-                    (_t, resultSet) ->
-                        _CACHE[dbName][record.id] = record
-                        dtd.resolve(record)
-                    (_t, e) ->
-                        console.log(e.stack)
-                        dtd.reject()
-                )
-
-            return dtd
-
-        indexeddb: (record) ->
-            mee = @
-            config = @config
-            db = config.db
-            storeName = config.storeName
-            dbName = config.dbName
-
-            dtd = $.Deferred()
-
-            if not record
-                setTimeout(
-                    -> dtd.reject()
-                    0
-                )
-                return dtd
-
-            objStor = db.transaction(storeName, IDBTransaction.READ_WRITE or 'readwrite').objectStore(storeName)
-            data = if config.blob then record.blob else record
-            putReq = objStor.put(data, record.id)
-            putReq.onsuccess = (evt) ->
-                _CACHE[dbName][record.id] = record
-                dtd.resolve(record)
-
-            putReq.onerror = (evt) ->
-                console.log(evt)
-                dtd.reject()
-
-            return dtd
-
-    remove =
-        websql: (id) ->
-            mee = @
-            config = @config
-            db = config.db
-            dbName = config.dbName
-            storeName = config.storeName
-            dtd = $.Deferred()
-
-            if not id
-                setTimeout(
-                    -> dtd.reject()
-                    0
-                )
-                return dtd
-
-            db.transaction (transaction) ->
-
-                transaction.executeSql(
-                    "DELETE FROM #{storeName} WHERE id=?;"
-                    [id]
-                    ->
-                        delete _CACHE[dbName][id]
-                        dtd.resolve(id)
-                    (_t, e) ->
-                        console.log(e.stack)
-                        dtd.reject()
-                )
-
-            return dtd
-
-        indexeddb: (id) ->
-            config = @config
-            db = config.db
-            storeName = config.storeName
-            dbName = config.dbName
-
-            dtd = $.Deferred()
-
-            if not id
-                setTimeout(
-                    -> dtd.reject()
-                    0
-                )
-                return dtd
-
-            objStor = db.transaction(storeName, IDBTransaction.READ_WRITE or 'readwrite').objectStore(storeName)
-            deleteReq = objStor.delete(id)
-            deleteReq.onsuccess = ->
-                delete _CACHE[dbName][id]
-                dtd.resolve(id)
-
-            deleteReq.onerror = (evt) ->
-                console.log(evt)
-                dtd.reject()
-
-            return dtd
-
-    clear =
-        websql: ->
-            mee = @
-            config = @config
-            db = config.db
-            dbName = config.dbName
-            storeName = config.storeName
-            dtd = $.Deferred()
-
-            db.transaction (transaction) ->
-
-                transaction.executeSql(
-                    "DELETE FROM #{storeName}"
-                    []
-                    ->
-                        dtd.resolve()
-                    (_t, e) ->
-                        console.log(e.stack)
-                        dtd.reject()
-                )
-
-            return dtd
-
-        indexeddb: ->
-            config = @config
-            db = config.db
-            storeName = config.storeName
-            dbName = config.dbName
-
-            dtd = $.Deferred()
-
-            objStor = db.transaction(storeName, IDBTransaction.READ_WRITE or 'readwrite').objectStore(storeName)
-            clearReq = objStor.clear()
-            clearReq.onsuccess = ->
-                _CACHE[dbName] = {}
+            config.server = config.id
+            schema = config.schema
+            storeName = Object.keys(schema)[0]
+            dtd = Deferred()
+
+            DBjs.open(config)
+            .done (s) =>
+                @config._db = s[storeName]
                 dtd.resolve()
+                return
 
-            clearReq.onerror = (evt) ->
-                console.log(evt)
+            .fail ->
                 dtd.reject()
+                return
 
-    newInstance = (params) ->
-
-        dtd = $.Deferred()
-
-        if params is undefined
             return
 
-        config = {}
-        $.extend true, config, localDBConfig, params
-        dbType = globalDBConfig.type
-        config.dbName = "#{config.userId}-#{config.storeName}"
-        _CACHE[config.dbName] = {}
+        close: ->
+            config = @config
+            return config._db.close()
 
-        $.when(open[dbType](config))
-        .done (db) ->
-            config.db = db
-            instance =
-                config: config
-                create: create[dbType]
-                update: update[dbType]
-                read: read[dbType]
-                readAll: readAll[dbType]
-                remove: remove[dbType]
-                clear: clear[dbType]
-                _convertToObject: if config.blob
-                then (blob, id) -> return {id: id, blob: blob}
-                else (record) ->
-                    try
-                        return JSON.parse(record)
-                    catch e
-                        return record
+        create: (data) ->
+            config = @config
+            return config._db.add data
 
-            dtd.resolve(instance)
-        .fail ->
-            dtd.reject()
+        get: (id) ->
+            config = @config
+            return config._db.get id
 
-        return dtd
+        all: ->
+            config = @config
+            return config._db.query().all().execute()
 
-    return {newInstance: newInstance}
+        remove: (id) ->
+            config = @config
+            return config._db.remove id
+
+        clear: ->
+            config = @config
+            return config._db.clear()
+
+        drop: ->
+            config = @config
+            return config._db.drop()
+
+    class WebSQL extends DBBase
+        _generateFieldsStatement: (fields, key) ->
+            ###
+            # Table fields example:
+            #   fields: {
+            #       field_name: {
+            #           type: "TEXT",
+            #           unique: true,
+            #           default: "option default",
+            #           notNull: true,
+            #           autoIncrement: false
+            #       }
+            #   }
+            ###
+
+            fieldList = []
+            gen = (name, type, options, primary = false) ->
+                result = [name]
+
+                result.push type
+
+                if primary
+                    result.push "PRIMARY KEY"
+
+                if options.notNull
+                    result.push "NOT NULL"
+
+                if !!options.default
+                    result.push "DEFAULT"
+                    result.push options.default
+
+                if options.autoIncrement
+                    result.push "AUTOINCREMENT"
+
+                return result.join(" ")
+
+            primaryKey = fields[key.keyPath]
+            primaryKeyOptions =
+                autoIncrement: key.autoIncrement
+                notNull: true
+
+            fieldList.push gen(key.keyPath, primaryKey.type, primaryKeyOptions, true)
+
+            for f in Object.keys(fields)
+                field = fields[f]
+                fieldList.push gen(f, field.type, field, false)
+
+            return fieldList.join(", ")
+
+        _qmarks: (count) ->
+
+            c = count
+            array = []
+            while c > 0
+                array.push "?"
+                c--
+
+            return array.join ","
+
+        open: ->
+            that = @
+            config = @config
+            schema = config.schema
+            dbName = config.id
+            description = config.description or dbName
+            storeName = Object.keys(schema)[0]
+            fields = schema[storeName].fields
+            key = schema[storeName].key
+            version = config.version
+            size = config.size
+            dtd = Deferred()
+
+            if not fields
+                throw "No fields defined in config object"
+
+            db = openDatabase(dbName, version, description, size)
+
+            db.transaction (transaction) ->
+                ###
+                # Table fields example:
+                #   fields: {
+                #       field_name: {
+                #           type: "TEXT",
+                #           unique: true,
+                #           default: "option default",
+                #           notNull: true,
+                #           autoIncrement: false
+                #       }
+                #   }
+                ###
+
+                transaction.executeSql(
+                    "CREATE TABLE IF NOT EXISTS #{ storeName } (#{ that._generateFieldsStatement fields, key });"
+                    null
+                    ->
+                        that.config._db = db
+                        dtd.resolve()
+                        return
+
+                    -> console.log "SQL statement error ", arguments[1]
+                )
+            return dtd
+
+        close: ->
+            # No supported
+
+        create: (data) ->
+            that = @
+            config = @config
+            schema = config.schema
+            storeName = Object.keys(schema)[0]
+            record = data
+            dtd = Deferred()
+
+            if not record
+                dtd.reject()
+                return dtd
+
+            fields = Object.keys(record)
+            qmarks = []
+            qmarks.push "?" for i in [0...fields.length]
+            values = []
+            values.push record[f] for f in fields
+
+            config._db.transaction (transaction) ->
+                
+                successCallback = ->
+                    dtd.resolve(record)
+
+                errorCallback = ->
+                    error = arguments[1]
+                    if error.code is error.CONSTRAINT_ERR
+                        that
+                        .get(record.id)
+                        .done (result) ->
+                            dtd.resolve(result)
+                            return
+
+                        .fail ->
+                            dtd.reject()
+                            return
+
+                    else
+                        dtd.reject()
+
+                transaction.executeSql(
+                    "INSERT INTO #{ storeName } (#{ fields.join(',') }) VALUES (#{ qmarks });"
+                    values
+                    successCallback
+                    errorCallback
+                )
+
+            return dtd
+
+        get: (id) ->
+            config = @config
+            schema = config.schema
+            storeName = Object.keys(schema)[0]
+            keyPath = schema[storeName].key.keyPath
+            dtd = Deferred()
+
+            if not id
+                dtd.reject()
+                return dtd
+
+            config._db.transaction (transaction) ->
+
+                successCallback = ->
+                    resultSet = arguments[1]
+                    item = resultSet.rows.item 0
+                    dtd.resolve item
+                    return
+
+                errorCallback = ->
+                    console.log arguments[1]  # SQLException instance
+                    dtd.reject()
+
+                transaction.executeSql(
+                    "SELECT * FROM #{ storeName } WHERE #{ keyPath }=?;"
+                    [id]
+                    successCallback
+                    errorCallback
+                )
+
+            return dtd
+
+        all: ->
+            that = @
+            config = @config
+            schema = config.schema
+            storeName = Object.keys(schema)[0]
+            dtd = Deferred()
+
+            config._db.transaction (transaction) ->
+
+                successCallback = ->
+                    resultSet = arguments[1]
+                    rows = resultSet.rows
+                    result = []
+                    i = 0
+                    while true
+                        item = rows.item i
+                        if not item
+                            break
+                        else
+                            result.push item
+                            i++
+
+                    dtd.resolve(result)
+                    return
+
+                errorCallback = ->
+                    console.log("Select SQL statement error ", arguments[1])
+                    dtd.reject()
+                    return
+
+                transaction.executeSql(
+                    "SELECT * FROM #{ storeName };"
+                    null
+                    successCallback
+                    errorCallback
+                )
+
+            return dtd
+
+        remove: (id) ->
+            config = @config
+            schema = config.schema
+            storeName = Object.keys(schema)[0]
+            keyPath = schema[storeName].key.keyPath
+            dtd = Deferred()
+
+            if not id
+                dtd.reject()
+                return dtd
+
+            config._db.transaction (transaction) ->
+
+                transaction.executeSql(
+                    "DELETE FROM #{ storeName } WHERE #{ keyPath }=?;"
+                    [id]
+                    ->
+                        dtd.resolve(id)
+                    ->
+                        console.log "Delete SQL statement error", arguments[1]
+                        dtd.reject()
+                )
+
+            return dtd
+
+        clear: ->
+            config = @config
+            schema = @config.schema
+            storeName = Object.keys(schema)[0]
+            dtd = Deferred()
+
+            config._db.transaction (transaction) ->
+
+                transaction.executeSql(
+                    "DELETE FROM #{ storeName }"
+                    null
+                    -> dtd.resolve()
+                    ->
+                        console.log "Clear SQL statement error", arguments[1]
+                        dtd.reject()
+                )
+
+            return dtd
+
+        drop: ->
+            throw "Not support delete database, see the spec 4.1 Databases"
+
+
+    class Factory
+        DO_OPEN: 'open'
+        DO_CREATE: 'create'
+        DO_READ: 'read'
+        DO_READALL: 'readall'
+        DO_REMOVE: 'remove'
+        DO_CLEAR: 'clear'
+        DO_DROP: 'drop'
+
+        constructor: (config) ->
+
+            _config = {}
+            
+            _config = extend defaultConfig, config
+            @config = _config
+        
+        open: ->
+
+            dtd = Deferred()
+
+            if !!@DB
+                dtd.resolve()
+                return dtd
+
+            switch @config.type
+                when TYPE_INDEXEDDB
+                    @DB = new IndexedDB(@config)
+                    d = @DB.open()
+                when TYPE_WEBSQL
+                    @DB = new WebSQL(@config)
+                    d = @DB.open()
+                else
+                    throw 'Type error'
+
+            d.done ->
+                dtd.resolve()
+                return
+
+            d.fail ->
+                dtd.reject()
+                return
+
+            return dtd
+
+        do: (actionName) ->
+
+            if typeof actionName isnt 'string'
+                throw "Do command must be string."
+
+            if !@hasOwnProperty "DO_#{ actionName.toUpperCase() }"
+                throw "No command named \"#{ actionName }\""
+
+            if actionName is @DO_OPEN
+                return @open.apply @, slice(arguments, 1)
+
+            return @DB[actionName].apply @DB, slice.call(arguments, 1)
+
+    return (config = defaultConfig) ->
+        return new Factory(config)
 )
