@@ -2,7 +2,9 @@
   "name": "key-value-webdb",
   "version": "0.0.0",
   "dependencies": {
-      "jasmine": "~1.3.1"
+    "jasmine": "~1.3.1"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "requirejs": "~2.1.8"
+  }
 }

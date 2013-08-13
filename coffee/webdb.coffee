@@ -1,6 +1,5 @@
-### globalstrict ###
-### globals: define ###
-"use strict"
+### global define ###
+
 ((root, factory) ->
 
     if typeof define is 'function' and define.amd
@@ -8,7 +7,8 @@
     else
         root.kvDB = factory(root.Deferred, root.db)
 
-)(@, (Deferred, DBjs) ->
+)(window, (deferred, DBjs) ->
+    "use strict"
 
     TYPE_INDEXEDDB = 'indexeddb'
     TYPE_WEBSQL = 'websql'
@@ -17,7 +17,7 @@
       return Math.floor((1 + Math.random()) * 0x10000).toString(16).substring(1)
     
     GUID = ->
-      return "#{ s4() }#{ s4() }-#{ s4() }-#{ s4() }-#{ s4() }-#{ s4() }#{ s4() }#{ s4() }"
+      return "#{ S4() }#{ S4() }-#{ S4() }-#{ S4() }-#{ S4() }-#{ S4() }#{ S4() }#{ S4() }"
 
     extend = (obj) ->
 
@@ -51,7 +51,7 @@
             if not not type
                 return TYPE_WEBSQL
 
-            throw Error('Need IndexedDB or WebSQL supported in your browser.')
+            throw 'Need IndexedDB or WebSQL supported in your browser.'
         )()
 
     class DBBase
@@ -64,7 +64,7 @@
             config.server = config.id
             schema = config.schema
             storeName = Object.keys(schema)[0]
-            dtd = Deferred()
+            dtd = deferred()
 
             DBjs.open(config)
             .done (s) =>
@@ -176,7 +176,7 @@
             key = schema[storeName].key
             version = config.version
             size = config.size
-            dtd = Deferred()
+            dtd = deferred()
 
             if not fields
                 throw "No fields defined in config object"
@@ -218,7 +218,7 @@
             schema = config.schema
             storeName = Object.keys(schema)[0]
             record = data
-            dtd = Deferred()
+            dtd = deferred()
 
             if not record
                 dtd.reject()
@@ -265,7 +265,7 @@
             schema = config.schema
             storeName = Object.keys(schema)[0]
             keyPath = schema[storeName].key.keyPath
-            dtd = Deferred()
+            dtd = deferred()
 
             if not id
                 dtd.reject()
@@ -297,7 +297,7 @@
             config = @config
             schema = config.schema
             storeName = Object.keys(schema)[0]
-            dtd = Deferred()
+            dtd = deferred()
 
             config._db.transaction (transaction) ->
 
@@ -336,7 +336,7 @@
             schema = config.schema
             storeName = Object.keys(schema)[0]
             keyPath = schema[storeName].key.keyPath
-            dtd = Deferred()
+            dtd = deferred()
 
             if not id
                 dtd.reject()
@@ -360,7 +360,7 @@
             config = @config
             schema = @config.schema
             storeName = Object.keys(schema)[0]
-            dtd = Deferred()
+            dtd = deferred()
 
             config._db.transaction (transaction) ->
 
@@ -397,7 +397,7 @@
         
         open: ->
 
-            dtd = Deferred()
+            dtd = deferred()
 
             if !!@DB
                 dtd.resolve()
@@ -436,6 +436,11 @@
 
             return @DB[actionName].apply @DB, slice.call(arguments, 1)
 
-    return (config = defaultConfig) ->
+    fun = (config = defaultConfig) ->
         return new Factory(config)
+
+    fun.TYPE_INDEXEDDB = TYPE_INDEXEDDB
+    fun.TYPE_WEBSQL = TYPE_WEBSQL
+
+    return fun
 )

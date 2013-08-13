@@ -1,9 +1,8 @@
 ({
-    baseUrl: '.'
+    baseUrl: '.',
+    name: 'webdb',
     paths: {
-        dbjs: 'libs/dbjs'
-    },
-    shim: {
-        'dbjs/db': ['dbjs/defer']
+        dbjs: 'libs/dbjs',
+        webdb: 'src/js/webdb'
     }
 })

@@ -1,3 +1,4 @@
+/* globals module */
 'use strict';
 
 module.exports = function(grunt) {
@@ -12,28 +13,25 @@ module.exports = function(grunt) {
             '* Copyright (c) <%= grunt.template.today("yyyy") %> <%= pkg.author.name %>;' +
             ' Licensed <%= props.license %> */\n',
         // Task configuration.
-        concat: {
-            options: {
-                banner: '<%= banner %>',
-                stripBanners: true
-            },
-            dist: {
-                src: ['lib/<%%= pkg.name %>.js'],
-                dest: 'dist/<%%= pkg.name %>.js'
-            }
+        clean: {
+            coffee: ['src/js']
         },
-        uglify: {
-            options: {
-                banner: '<%= banner %>'
-            },
-            dist: {
-                src: '<%= concat.dist.dest %>',
-                dest: 'dist/<%%= pkg.name %>.min.js'
+        coffee: {
+            compile: {
+                options: {
+                    bare: true
+                },
+                expand: true,
+                flatten: true,
+                cwd: 'coffee',
+                src: ['*.coffee'],
+                dest: 'src/js',
+                ext: '.js'
             }
         },
         jshint: {
             options: {
-                curly: true,
+                curly: false,
                 eqeqeq: true,
                 immed: true,
                 latedef: true,
@@ -45,17 +43,27 @@ module.exports = function(grunt) {
                 boss: true,
                 eqnull: true,
                 browser: true,
-                globals: {}
+                devel: true,
+                shadow: true,
+                validthis: true,
+                globals: {
+                    describe: true,
+                    it: true,
+                    runs: true,
+                    waitsFor: true,
+                    expect: true
+                },
+                '-W055': true
             },
             gruntfile: {
                 src: 'Gruntfile.js'
             },
-            lib_test: {
-                src: ['lib/**/*.js', 'test/**/*.js']
+            test: {
+                src: ['test/spec/**/*.js']
+            },
+            js: {
+                src: ['src/**/*.js']
             }
-        },
-        qunit: {
-            files: ['test/**/*.html']
         },
         watch: {
             gruntfile: {
@@ -66,17 +74,30 @@ module.exports = function(grunt) {
                 files: '<%= jshint.libTest.src %>',
                 tasks: ['jshint:libTest', 'qunit']
             }
+        },
+        connect: {
+            options: {
+                port: 8888
+            },
+            test: {
+                options: {
+                    keepalive: true
+                }
+            }
         }
     });
 
     // These plugins provide necessary tasks.
-    grunt.loadNpmTasks('grunt-contrib-concat');
-    grunt.loadNpmTasks('grunt-contrib-uglify');
-    grunt.loadNpmTasks('grunt-contrib-qunit');
     grunt.loadNpmTasks('grunt-contrib-jshint');
     grunt.loadNpmTasks('grunt-contrib-watch');
+    grunt.loadNpmTasks('grunt-contrib-connect');
+    grunt.loadNpmTasks('grunt-contrib-coffee');
+    grunt.loadNpmTasks('grunt-contrib-requirejs');
+    grunt.loadNpmTasks('grunt-contrib-clean');
 
     // Default task.
-    grunt.registerTask('default', ['jshint', 'qunit', 'concat', 'uglify']);
+    grunt.registerTask('default', ['jshint']);
 
+    grunt.registerTask('compile', ['clean:coffee', 'coffee:compile', 'jshint:js']);
+    grunt.registerTask('test', ['compile', 'connect:test']);
 };

@@ -7,12 +7,20 @@
     <body>
         <script src="bower_components/jasmine/lib/jasmine-core/jasmine.js"></script>
         <script src="bower_components/jasmine/lib/jasmine-core/jasmine-html.js"></script>
-
         <!-- include source files here... -->
-
+        <script src="bower_components/requirejs/require.js"></script>
         <!-- include spec files here... -->
-        <script src="spec/test.js"></script>
-
+        <script>
+            require.config({
+                baseUrl: '../',
+                name: 'webdb',
+                paths: {
+                    dbjs: 'libs/dbjs',
+                    webdb: 'src/js/webdb'
+                }
+            });
+            require(['test/spec/dbSpec']);
+        </script>
         <script>
             (function() {
                 var jasmineEnv = jasmine.getEnv();
