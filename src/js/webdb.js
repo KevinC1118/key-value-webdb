@@ -11,7 +11,7 @@ var __hasProp = {}.hasOwnProperty,
   }
 })(window, function(deferred, DBjs) {
   "use strict";
-  var DBBase, Factory, GUID, IndexedDB, S4, TYPE_INDEXEDDB, TYPE_WEBSQL, WebSQL, defaultConfig, extend, fun, slice, _ref, _ref1;
+  var DBBase, Factory, GUID, IndexedDB, S4, TYPE_INDEXEDDB, TYPE_WEBSQL, WebSQL, defaultConfig, extend, slice, _ref, _ref1;
   TYPE_INDEXEDDB = 'indexeddb';
   TYPE_WEBSQL = 'websql';
   S4 = function() {
@@ -76,15 +76,15 @@ var __hasProp = {}.hasOwnProperty,
     }
 
     IndexedDB.prototype.open = function() {
-      var config, dtd, schema, storeName,
+      var config, dtd, schema,
         _this = this;
       config = this.config;
       config.server = config.id;
       schema = config.schema;
-      storeName = Object.keys(schema)[0];
       dtd = deferred();
+      this.storeName = Object.keys(schema)[0];
       DBjs.open(config).done(function(s) {
-        _this.config._db = s[storeName];
+        _this._db = s;
         dtd.resolve();
       }).fail(function() {
         dtd.reject();
@@ -93,45 +93,33 @@ var __hasProp = {}.hasOwnProperty,
     };
 
     IndexedDB.prototype.close = function() {
-      var config;
-      config = this.config;
-      return config._db.close();
+      return this._db.close();
     };
 
-    IndexedDB.prototype.create = function(data) {
-      var config;
-      config = this.config;
-      return config._db.add(data);
+    IndexedDB.prototype.create = function() {
+      var that;
+      that = this._db[this.storeName];
+      return that.add.apply(that, arguments);
     };
 
     IndexedDB.prototype.get = function(id) {
-      var config;
-      config = this.config;
-      return config._db.get(id);
+      return this._db[this.storeName].get(id);
     };
 
     IndexedDB.prototype.all = function() {
-      var config;
-      config = this.config;
-      return config._db.query().all().execute();
+      return this._db[this.storeName].query().all().execute();
     };
 
     IndexedDB.prototype.remove = function(id) {
-      var config;
-      config = this.config;
-      return config._db.remove(id);
+      return this._db[this.storeName].remove(id);
     };
 
     IndexedDB.prototype.clear = function() {
-      var config;
-      config = this.config;
-      return config._db.clear();
+      return this._db[this.storeName].clear();
     };
 
     IndexedDB.prototype.drop = function() {
-      var config;
-      config = this.config;
-      return config._db.drop();
+      return this._db.drop();
     };
 
     return IndexedDB;
@@ -171,27 +159,43 @@ var __hasProp = {}.hasOwnProperty,
         if (primary) {
           result.push("PRIMARY KEY");
         }
-        if (options.notNull) {
-          result.push("NOT NULL");
-        }
         if (!!options["default"]) {
           result.push("DEFAULT");
           result.push(options["default"]);
         }
         if (options.autoIncrement) {
           result.push("AUTOINCREMENT");
+        } else {
+          if (!!options["default"]) {
+            result.push("DEFAULT");
+            result.push("'" + options["default"] + "'");
+          }
+          if (options.notNull) {
+            result.push("NOT NULL");
+          }
         }
         return result.join(" ");
       };
-      primaryKey = fields[key.keyPath];
+      primaryKey = key.keyPath;
       primaryKeyOptions = {
-        autoIncrement: key.autoIncrement,
+        autoIncrement: !!key.autoIncrement,
         notNull: true
       };
-      fieldList.push(gen(key.keyPath, primaryKey.type, primaryKeyOptions, true));
+      if (fields.hasOwnProperty(primaryKey)) {
+        primaryKeyOptions = extend(fields[primaryKey], primaryKeyOptions);
+      }
+      if (primaryKeyOptions.autoIncrement) {
+        primaryKeyOptions.type = 'INTEGER';
+      } else {
+        primaryKeyOptions.type = primaryKeyOptions.type ? primaryKeyOptions.type : 'TEXT';
+      }
+      fieldList.push(gen(primaryKey, primaryKeyOptions.type, primaryKeyOptions, true));
       _ref2 = Object.keys(fields);
       for (_i = 0, _len = _ref2.length; _i < _len; _i++) {
         f = _ref2[_i];
+        if (f === primaryKey) {
+          continue;
+        }
         field = fields[f];
         fieldList.push(gen(f, field.type, field, false));
       }
@@ -240,25 +244,26 @@ var __hasProp = {}.hasOwnProperty,
         #   }
         */
 
-        return transaction.executeSql("CREATE TABLE IF NOT EXISTS " + storeName + " (" + (that._generateFieldsStatement(fields, key)) + ");", null, function() {
-          that.config._db = db;
+        var statement;
+        statement = that._generateFieldsStatement(fields, key);
+        return transaction.executeSql("CREATE TABLE IF NOT EXISTS " + storeName + " (" + statement + ");", null, function() {
+          that._db = db;
           dtd.resolve();
         }, function() {
+          console.log(statement);
           return console.log("SQL statement error ", arguments[1]);
         });
       });
       return dtd;
     };
 
-    WebSQL.prototype.close = function() {};
-
-    WebSQL.prototype.create = function(data) {
+    WebSQL.prototype.create = function() {
       var config, dtd, f, fields, i, qmarks, record, schema, storeName, that, values, _i, _j, _len, _ref2;
       that = this;
       config = this.config;
       schema = config.schema;
       storeName = Object.keys(schema)[0];
-      record = data;
+      record = arguments[0];
       dtd = deferred();
       if (!record) {
         dtd.reject();
@@ -274,7 +279,7 @@ var __hasProp = {}.hasOwnProperty,
         f = fields[_j];
         values.push(record[f]);
       }
-      config._db.transaction(function(transaction) {
+      this._db.transaction(function(transaction) {
         var errorCallback, successCallback;
         successCallback = function() {
           return dtd.resolve(record);
@@ -308,7 +313,7 @@ var __hasProp = {}.hasOwnProperty,
         dtd.reject();
         return dtd;
       }
-      config._db.transaction(function(transaction) {
+      this._db.readTransaction(function(transaction) {
         var errorCallback, successCallback;
         successCallback = function() {
           var item, resultSet;
@@ -332,7 +337,7 @@ var __hasProp = {}.hasOwnProperty,
       schema = config.schema;
       storeName = Object.keys(schema)[0];
       dtd = deferred();
-      config._db.transaction(function(transaction) {
+      this._db.readTransaction(function(transaction) {
         var errorCallback, successCallback;
         successCallback = function() {
           var i, item, result, resultSet, rows;
@@ -371,7 +376,7 @@ var __hasProp = {}.hasOwnProperty,
         dtd.reject();
         return dtd;
       }
-      config._db.transaction(function(transaction) {
+      this._db.transaction(function(transaction) {
         return transaction.executeSql("DELETE FROM " + storeName + " WHERE " + keyPath + "=?;", [id], function() {
           return dtd.resolve(id);
         }, function() {
@@ -388,7 +393,7 @@ var __hasProp = {}.hasOwnProperty,
       schema = this.config.schema;
       storeName = Object.keys(schema)[0];
       dtd = deferred();
-      config._db.transaction(function(transaction) {
+      this._db.transaction(function(transaction) {
         return transaction.executeSql("DELETE FROM " + storeName, null, function() {
           return dtd.resolve();
         }, function() {
@@ -399,15 +404,11 @@ var __hasProp = {}.hasOwnProperty,
       return dtd;
     };
 
-    WebSQL.prototype.drop = function() {
-      throw "Not support delete database, see the spec 4.1 Databases";
-    };
-
     return WebSQL;
 
   })(DBBase);
   Factory = (function() {
-    Factory.prototype.ACTIONS = ['open', 'create', 'get', 'all', 'remove', 'clear', 'drop', 'close'];
+    Factory.prototype.ACTIONS = ['create', 'get', 'all', 'remove', 'clear', 'drop', 'close'];
 
     function Factory(config) {
       var _config;
@@ -416,26 +417,35 @@ var __hasProp = {}.hasOwnProperty,
       this.config = _config;
     }
 
-    Factory.prototype._open = function() {
-      var d, dtd;
+    Factory.prototype.open = function() {
+      var d, db, dtd,
+        _this = this;
       dtd = deferred();
-      if (!!this._DB) {
-        dtd.resolve();
-        return dtd;
-      }
       switch (this.config.type) {
         case TYPE_INDEXEDDB:
-          this._DB = new IndexedDB(this.config);
+          db = new IndexedDB(this.config);
           break;
         case TYPE_WEBSQL:
-          this._DB = new WebSQL(this.config);
+          db = new WebSQL(this.config);
           break;
         default:
-          throw 'Type error';
+          throw 'Database type error';
       }
-      d = this._DB.open();
+      d = db.open();
       d.done(function() {
-        dtd.resolve();
+        var instance, k, wrapper, _i, _len, _ref2;
+        instance = {};
+        wrapper = function(db, method) {
+          return db[method].apply(db, slice.call(arguments, 2));
+        };
+        _ref2 = Object.keys(Object.getPrototypeOf(db));
+        for (_i = 0, _len = _ref2.length; _i < _len; _i++) {
+          k = _ref2[_i];
+          if (_this.ACTIONS.indexOf(k) !== -1) {
+            instance[k] = wrapper.bind(instance, db, k);
+          }
+        }
+        dtd.resolve(instance);
       });
       d.fail(function() {
         dtd.reject();
@@ -443,29 +453,10 @@ var __hasProp = {}.hasOwnProperty,
       return dtd;
     };
 
-    Factory.prototype["do"] = function(actionName) {
-      if (typeof actionName !== 'string') {
-        throw "Not string.";
-      }
-      if (this.ACTIONS.indexOf(actionName) === -1) {
-        throw "No command named \"" + actionName + "\"";
-      }
-      if (actionName === this.ACTIONS[0]) {
-        return this._open();
-      }
-      return this._DB[actionName].apply(this._DB, slice.call(arguments, 1));
-    };
-
     return Factory;
 
   })();
-  fun = function(config) {
-    if (config == null) {
-      config = defaultConfig;
-    }
-    return new Factory(config);
-  };
-  fun.TYPE_INDEXEDDB = TYPE_INDEXEDDB;
-  fun.TYPE_WEBSQL = TYPE_WEBSQL;
-  return fun;
+  Factory.TYPE_INDEXEDDB = TYPE_INDEXEDDB;
+  Factory.TYPE_WEBSQL = TYPE_WEBSQL;
+  return Factory;
 });

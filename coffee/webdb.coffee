@@ -65,12 +65,13 @@
             config = @config
             config.server = config.id
             schema = config.schema
-            storeName = Object.keys(schema)[0]
             dtd = deferred()
+
+            @storeName = Object.keys(schema)[0]
 
             DBjs.open(config)
             .done (s) =>
-                @config._db = s[storeName]
+                @_db = s
                 dtd.resolve()
                 return
 
@@ -81,32 +82,26 @@
             return dtd
 
         close: ->
-            config = @config
-            return config._db.close()
+            return @_db.close()
 
-        create: (data) ->
-            config = @config
-            return config._db.add data
+        create: ->
+            that = @_db[@storeName]
+            return that.add.apply that, arguments
 
         get: (id) ->
-            config = @config
-            return config._db.get id
+            return @_db[@storeName].get id
 
         all: ->
-            config = @config
-            return config._db.query().all().execute()
+            return @_db[@storeName].query().all().execute()
 
         remove: (id) ->
-            config = @config
-            return config._db.remove id
+            return @_db[@storeName].remove id
 
         clear: ->
-            config = @config
-            return config._db.clear()
+            return @_db[@storeName].clear()
 
         drop: ->
-            config = @config
-            return config._db.drop()
+            return @_db.drop()
 
     class WebSQL extends DBBase
         _generateFieldsStatement: (fields, key) ->
@@ -132,26 +127,41 @@
                 if primary
                     result.push "PRIMARY KEY"
 
-                if options.notNull
-                    result.push "NOT NULL"
-
                 if !!options.default
                     result.push "DEFAULT"
                     result.push options.default
 
                 if options.autoIncrement
                     result.push "AUTOINCREMENT"
+                else
+                    if !!options.default
+                        result.push "DEFAULT"
+                        result.push "'#{ options.default }'"
+
+                    if options.notNull
+                        result.push "NOT NULL"
 
                 return result.join(" ")
 
-            primaryKey = fields[key.keyPath]
+            primaryKey = key.keyPath
             primaryKeyOptions =
-                autoIncrement: key.autoIncrement
+                autoIncrement: !!key.autoIncrement
                 notNull: true
 
-            fieldList.push gen(key.keyPath, primaryKey.type, primaryKeyOptions, true)
+            if fields.hasOwnProperty primaryKey
+                primaryKeyOptions = extend fields[primaryKey], primaryKeyOptions
+
+            if primaryKeyOptions.autoIncrement
+                primaryKeyOptions.type = 'INTEGER'
+            else
+                primaryKeyOptions.type = if primaryKeyOptions.type then primaryKeyOptions.type else 'TEXT'
+
+            fieldList.push gen(primaryKey, primaryKeyOptions.type, primaryKeyOptions, true)
 
             for f in Object.keys(fields)
+                if f is primaryKey
+                    continue
+
                 field = fields[f]
                 fieldList.push gen(f, field.type, field, false)
 
@@ -199,30 +209,31 @@
                 #   }
                 ###
 
+                statement = that._generateFieldsStatement fields, key
                 transaction.executeSql(
-                    "CREATE TABLE IF NOT EXISTS #{ storeName } (#{ that._generateFieldsStatement fields, key });"
+                    "CREATE TABLE IF NOT EXISTS #{ storeName } (#{ statement });"
                     null
                     ->
-                        that.config._db = db
+                        that._db = db
                         dtd.resolve()
                         return
 
-                    -> console.log "SQL statement error ", arguments[1]
+                    ->
+                        console.log statement
+                        console.log "SQL statement error ", arguments[1]
                 )
             return dtd
 
-        close: ->
-            # No supported
-
-        create: (data) ->
+        create: ->
             that = @
             config = @config
             schema = config.schema
             storeName = Object.keys(schema)[0]
-            record = data
+            record = arguments[0]
+
             dtd = deferred()
 
-            if not record
+            if !record
                 dtd.reject()
                 return dtd
 
@@ -232,7 +243,7 @@
             values = []
             values.push record[f] for f in fields
 
-            config._db.transaction (transaction) ->
+            @_db.transaction (transaction) ->
                 
                 successCallback = ->
                     dtd.resolve(record)
@@ -273,7 +284,7 @@
                 dtd.reject()
                 return dtd
 
-            config._db.transaction (transaction) ->
+            @_db.readTransaction (transaction) ->
 
                 successCallback = ->
                     resultSet = arguments[1]
@@ -301,7 +312,7 @@
             storeName = Object.keys(schema)[0]
             dtd = deferred()
 
-            config._db.transaction (transaction) ->
+            @_db.readTransaction (transaction) ->
 
                 successCallback = ->
                     resultSet = arguments[1]
@@ -344,7 +355,7 @@
                 dtd.reject()
                 return dtd
 
-            config._db.transaction (transaction) ->
+            @_db.transaction (transaction) ->
 
                 transaction.executeSql(
                     "DELETE FROM #{ storeName } WHERE #{ keyPath }=?;"
@@ -364,7 +375,7 @@
             storeName = Object.keys(schema)[0]
             dtd = deferred()
 
-            config._db.transaction (transaction) ->
+            @_db.transaction (transaction) ->
 
                 transaction.executeSql(
                     "DELETE FROM #{ storeName }"
@@ -377,40 +388,41 @@
 
             return dtd
 
-        drop: ->
-            throw "Not support delete database, see the spec 4.1 Databases"
+        # drop: ->
+        #     throw "Not support delete database, see the spec 4.1 Databases"
 
 
     class Factory
-        ACTIONS: ['open', 'create', 'get', 'all', 'remove', 'clear', 'drop', 'close']
-
+        ACTIONS: ['create', 'get', 'all', 'remove', 'clear', 'drop', 'close']
         constructor: (config) ->
-
             _config = {}
-            
             _config = extend defaultConfig, config
             @config = _config
         
-        _open: ->
-
+        open: ->
             dtd = deferred()
-
-            if !!@config._db
-                dtd.resolve()
-                return dtd
 
             switch @config.type
                 when TYPE_INDEXEDDB
-                    new IndexedDB(@config)
+                    db = new IndexedDB(@config)
                 when TYPE_WEBSQL
-                    new WebSQL(@config)
+                    db = new WebSQL(@config)
                 else
-                    throw 'Type error'
+                    throw 'Database type error'
 
-            d = @config._db.open()
+            d = db.open()
 
-            d.done ->
-                dtd.resolve()
+            d.done =>
+
+                instance = {}
+                wrapper = (db, method) ->
+                    return db[method].apply db, slice.call(arguments, 2)
+
+                for k in Object.keys(Object.getPrototypeOf(db))
+                    if @ACTIONS.indexOf(k) isnt -1
+                        instance[k] = wrapper.bind instance, db, k
+
+                dtd.resolve(instance)
                 return
 
             d.fail ->
@@ -419,24 +431,8 @@
 
             return dtd
 
-        do: (actionName) ->
+    Factory.TYPE_INDEXEDDB = TYPE_INDEXEDDB
+    Factory.TYPE_WEBSQL = TYPE_WEBSQL
 
-            if typeof actionName isnt 'string'
-                throw "Not string."
-
-            if @ACTIONS.indexOf(actionName) is -1
-                throw "No command named \"#{ actionName }\""
-
-            if actionName is @ACTIONS[0]
-                return @_open()
-
-            return @_DB[actionName].apply @_DB, slice.call(arguments, 1)
-
-    fun = (config = defaultConfig) ->
-        return new Factory(config)
-
-    fun.TYPE_INDEXEDDB = TYPE_INDEXEDDB
-    fun.TYPE_WEBSQL = TYPE_WEBSQL
-
-    return fun
+    return Factory
 )

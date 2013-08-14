@@ -51,7 +51,9 @@ module.exports = function(grunt) {
                     it: true,
                     runs: true,
                     waitsFor: true,
-                    expect: true
+                    expect: true,
+                    beforeEach: true,
+                    afterEach: true
                 },
                 '-W055': true
             },
@@ -99,5 +101,5 @@ module.exports = function(grunt) {
     grunt.registerTask('default', ['jshint']);
 
     grunt.registerTask('compile', ['clean:coffee', 'coffee:compile', 'jshint:js']);
-    grunt.registerTask('test', ['compile', 'connect:test']);
+    grunt.registerTask('test', ['compile', 'jshint:test', 'connect:test']);
 };
