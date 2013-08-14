@@ -340,13 +340,18 @@ var __hasProp = {}.hasOwnProperty,
       this._db.readTransaction(function(transaction) {
         var errorCallback, successCallback;
         successCallback = function() {
-          var i, item, result, resultSet, rows;
+          var e, i, item, result, resultSet, rows;
           resultSet = arguments[1];
           rows = resultSet.rows;
           result = [];
           i = 0;
           while (true) {
-            item = rows.item(i);
+            try {
+              item = rows.item(i);
+            } catch (_error) {
+              e = _error;
+              item = null;
+            }
             if (!item) {
               break;
             } else {

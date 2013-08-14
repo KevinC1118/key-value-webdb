@@ -320,7 +320,11 @@
                     result = []
                     i = 0
                     while true
-                        item = rows.item i
+                        try
+                            item = rows.item i
+                        catch e
+                            item = null
+
                         if not item
                             break
                         else
