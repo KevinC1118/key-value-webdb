@@ -47,7 +47,7 @@ define(['webdb'], function (WebDB) {
                 });
             });
 
-            it('insert item', function () {
+            it('insert', function () {
                 var record;
 
                 runs(function () {
@@ -62,6 +62,71 @@ define(['webdb'], function (WebDB) {
 
                 runs(function () {
                     expect(record.name).toEqual(item.name);
+                });
+            });
+
+            it('get', function () {
+                var record, key = 1;
+
+                runs(function () {
+                    DB.get(key).done(function (r) {
+                        record = r;
+                    });
+                });
+
+                waitsFor(function () {
+                    return !!record;
+                }, 'timeout for create item', 1000);
+
+                runs(function () {
+                    expect(record.name).toEqual(item.name);
+                });
+            });
+
+            it('all', function () {
+                var resultset;
+
+                runs(function () {
+                    DB.all().done(function (rs) {
+                        resultset = rs;
+                    });
+                });
+
+                waitsFor(function () {
+                    return !!resultset;
+                }, 'timeout for create item', 1000);
+
+                runs(function () {
+                    expect(resultset.length).toEqual(1);
+                });
+            });
+
+            it('remove', function () {
+                var resultset, key = 1, removedkey;
+
+                runs(function () {
+                    DB.remove(key).done(function (k) {
+                        removedkey = k;
+                    });
+                });
+
+                waitsFor(function () {
+                    return !!removedkey;
+                }, 'timeout for remove item', 1000);
+
+                runs(function () {
+                    DB.all().done(function (rs) {
+                        resultset = rs;
+                    });
+                });
+
+                waitsFor(function () {
+                    return !!resultset;
+                }, 'timeout for create item', 1000);
+
+                runs(function () {
+                    expect(removedkey).toBe(key);
+                    expect(resultset.length).toBe(0);
                 });
             });
         });
