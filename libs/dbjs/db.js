@@ -446,7 +446,7 @@
         define( function(require) {
 
             if (!Deferred) {
-                Deferred = require('deferred');
+                Deferred = require('dbjs/defer');
             }
 
             return db;
