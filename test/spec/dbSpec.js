@@ -2,64 +2,70 @@
 'use strict';
 
 define(['webdb'], function (webDB) {
+    var indexedDB = window.indexedDB || window.webkitIndexedDB || window.mozIndexedDB || window.msIndexedDB || window.oIndexedDB;
 
     describe("Indexeddb test", function () {
-    
-        var indexedDBSupported = !!(window.indexedDB || window.webkitIndexedDB || window.mozIndexedDB || window.msIndexedDB || window.oIndexedDB),
-            webSQLSupported = !!window.openDatabase,
-            config = {
-                id: "webdb-test",
-                schema: {
-                    test: {
-                        key: {
-                            keyPath: 'id',
-                            autoIncrement: false
+
+        var DB, config = {
+            id: "webdb-test",
+            schema: {
+                test: {
+                    key: {
+                        keyPath: 'id',
+                        autoIncrement: false
+                    },
+                    fields: {
+                        id: {
+                            type: 'TEXT',
+                            notNull: true
                         },
-                        fields: {
-                            id: {
-                                type: 'TEXT',
-                                notNull: true
-                            },
-                            name: {
-                                type: 'TEXT'
-                            },
-                            age: {
-                                type: 'INTEGER'
-                            }
+                        name: {
+                            type: 'TEXT'
+                        },
+                        age: {
+                            type: 'INTEGER'
                         }
                     }
                 }
-            };
-    
-        describe("open", function () {
-    
-            if (indexedDBSupported) {
-    
-                it("open indexeddb", function () {
-                    var _config = config,
-                        done = false,
-                        DB;
-    
-                    _config.type = webDB.TYPE_INDEXEDDB;
-                    DB = webDB(_config);
-    
-                    runs(function () {
-                        DB.open().done(function () {
-                            done = true;
-                        });
-                    });
-    
-                    waitsFor(function () {
-                        return done;
-                    }, 'timeout for open indexedDB', 1000);
-    
-                    runs(function () {
-                        expect(DB.DB).toBeDefined();
-                    });
-                });
             }
+        };
+
+        afterEach(function () {
+            var done = false;
+            
+            runs(function () {
+                var req = indexedDB.deleteDatabase(config.id);
+                req.onsuccess = function () {
+                    done = true;
+                };
+            });
+
+            waitsFor(function () {
+                return done;
+            }, 'timeout for delete database', 1000);
+        });
+
+        it("open", function () {
+            var _config = config,
+                done = false;
     
-            if (webSQLSupported) {}
+            _config.type = webDB.TYPE_INDEXEDDB;
+            DB = webDB(_config);
+    
+            runs(function () {
+                DB.do('open').done(function () {
+                    done = true;
+                });
+            });
+    
+            waitsFor(function () {
+                return done;
+            }, 'timeout for open indexedDB', 1000);
+    
+            runs(function () {
+                expect(DB._DB).toBeDefined();
+                DB.do('close');
+            });
         });
     });
 });

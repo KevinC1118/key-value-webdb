@@ -107,9 +107,9 @@
     };
 
     if ( typeof define === 'function' && define.amd ) {
-        define( function() { return Deferred; } );
+        define(function () { return Deferred; });
     } else {
         window.Deferred = Deferred;
     }
 
-})(window)
+})(window);

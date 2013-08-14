@@ -5,9 +5,9 @@ var __hasProp = {}.hasOwnProperty,
 
 (function(root, factory) {
   if (typeof define === 'function' && define.amd) {
-    return define(['dbjs/defer', 'dbjs/db'], factory);
+    define(['dbjs/defer', 'dbjs/db'], factory);
   } else {
-    return root.kvDB = factory(root.Deferred, root.db);
+    root.kvDB = factory(root.Deferred, root.db);
   }
 })(window, function(deferred, DBjs) {
   "use strict";
@@ -45,9 +45,7 @@ var __hasProp = {}.hasOwnProperty,
     version: '1',
     description: null,
     schema: null,
-    websql: {
-      size: 5 * 1024 * 1024
-    },
+    size: 5 * 1024 * 1024,
     type: (function() {
       var type;
       type = window.indexedDB || window.webkitIndexedDB || window.mozIndexedDB;
@@ -91,6 +89,7 @@ var __hasProp = {}.hasOwnProperty,
       }).fail(function() {
         dtd.reject();
       });
+      return dtd;
     };
 
     IndexedDB.prototype.close = function() {
@@ -408,19 +407,7 @@ var __hasProp = {}.hasOwnProperty,
 
   })(DBBase);
   Factory = (function() {
-    Factory.prototype.DO_OPEN = 'open';
-
-    Factory.prototype.DO_CREATE = 'create';
-
-    Factory.prototype.DO_READ = 'read';
-
-    Factory.prototype.DO_READALL = 'readall';
-
-    Factory.prototype.DO_REMOVE = 'remove';
-
-    Factory.prototype.DO_CLEAR = 'clear';
-
-    Factory.prototype.DO_DROP = 'drop';
+    Factory.prototype.ACTIONS = ['open', 'create', 'get', 'all', 'remove', 'clear', 'drop', 'close'];
 
     function Factory(config) {
       var _config;
@@ -429,25 +416,24 @@ var __hasProp = {}.hasOwnProperty,
       this.config = _config;
     }
 
-    Factory.prototype.open = function() {
+    Factory.prototype._open = function() {
       var d, dtd;
       dtd = deferred();
-      if (!!this.DB) {
+      if (!!this._DB) {
         dtd.resolve();
         return dtd;
       }
       switch (this.config.type) {
         case TYPE_INDEXEDDB:
-          this.DB = new IndexedDB(this.config);
-          d = this.DB.open();
+          this._DB = new IndexedDB(this.config);
           break;
         case TYPE_WEBSQL:
-          this.DB = new WebSQL(this.config);
-          d = this.DB.open();
+          this._DB = new WebSQL(this.config);
           break;
         default:
           throw 'Type error';
       }
+      d = this._DB.open();
       d.done(function() {
         dtd.resolve();
       });
@@ -459,15 +445,15 @@ var __hasProp = {}.hasOwnProperty,
 
     Factory.prototype["do"] = function(actionName) {
       if (typeof actionName !== 'string') {
-        throw "Do command must be string.";
+        throw "Not string.";
       }
-      if (!this.hasOwnProperty("DO_" + (actionName.toUpperCase()))) {
+      if (this.ACTIONS.indexOf(actionName) === -1) {
         throw "No command named \"" + actionName + "\"";
       }
-      if (actionName === this.DO_OPEN) {
-        return this.open.apply(this, slice(arguments, 1));
+      if (actionName === this.ACTIONS[0]) {
+        return this._open();
       }
-      return this.DB[actionName].apply(this.DB, slice.call(arguments, 1));
+      return this._DB[actionName].apply(this._DB, slice.call(arguments, 1));
     };
 
     return Factory;

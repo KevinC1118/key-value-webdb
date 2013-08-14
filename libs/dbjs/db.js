@@ -5,17 +5,13 @@
         transactionModes = {
             readonly: 'readonly',
             readwrite: 'readwrite'
-        };
+        },
+        Deferred = window.Deferred;
         
     var hasOwn = Object.prototype.hasOwnProperty;
 
     if ( !indexedDB ) {
         throw 'IndexedDB required';
-    }
-
-    var Deferred = window.Deferred;
-    if (!Deferred && (typeof require === 'function')) {
-        Deferred = require('deferred');
     }
 
     var Server = function ( db , name ) {
@@ -424,7 +420,14 @@
         }
     };
     if ( typeof define === 'function' && define.amd ) {
-        define( function() { return db; } );
+        define(function(require) {
+
+            if (!Deferred) {
+                Deferred = require('dbjs/defer');
+            }
+
+            return db;
+        });
     } else {
         window.db = db;
     }

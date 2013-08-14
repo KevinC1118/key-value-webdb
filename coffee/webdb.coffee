@@ -7,6 +7,8 @@
     else
         root.kvDB = factory(root.Deferred, root.db)
 
+    return
+
 )(window, (deferred, DBjs) ->
     "use strict"
 
@@ -40,8 +42,8 @@
         version: '1'
         description: null
         schema: null
-        websql:  # option, but required by websql
-            size: 5 * 1024 * 1024  # 5 MB
+        # optional, required by websql
+        size: 5 * 1024 * 1024  # 5 MB
         type: ( ->
             type = window.indexedDB or window.webkitIndexedDB or window.mozIndexedDB
             if not not type
@@ -76,7 +78,7 @@
                 dtd.reject()
                 return
 
-            return
+            return dtd
 
         close: ->
             config = @config
@@ -380,13 +382,7 @@
 
 
     class Factory
-        DO_OPEN: 'open'
-        DO_CREATE: 'create'
-        DO_READ: 'read'
-        DO_READALL: 'readall'
-        DO_REMOVE: 'remove'
-        DO_CLEAR: 'clear'
-        DO_DROP: 'drop'
+        ACTIONS: ['open', 'create', 'get', 'all', 'remove', 'clear', 'drop', 'close']
 
         constructor: (config) ->
 
@@ -395,23 +391,23 @@
             _config = extend defaultConfig, config
             @config = _config
         
-        open: ->
+        _open: ->
 
             dtd = deferred()
 
-            if !!@DB
+            if !!@config._db
                 dtd.resolve()
                 return dtd
 
             switch @config.type
                 when TYPE_INDEXEDDB
-                    @DB = new IndexedDB(@config)
-                    d = @DB.open()
+                    new IndexedDB(@config)
                 when TYPE_WEBSQL
-                    @DB = new WebSQL(@config)
-                    d = @DB.open()
+                    new WebSQL(@config)
                 else
                     throw 'Type error'
+
+            d = @config._db.open()
 
             d.done ->
                 dtd.resolve()
@@ -426,15 +422,15 @@
         do: (actionName) ->
 
             if typeof actionName isnt 'string'
-                throw "Do command must be string."
+                throw "Not string."
 
-            if !@hasOwnProperty "DO_#{ actionName.toUpperCase() }"
+            if @ACTIONS.indexOf(actionName) is -1
                 throw "No command named \"#{ actionName }\""
 
-            if actionName is @DO_OPEN
-                return @open.apply @, slice(arguments, 1)
+            if actionName is @ACTIONS[0]
+                return @_open()
 
-            return @DB[actionName].apply @DB, slice.call(arguments, 1)
+            return @_DB[actionName].apply @_DB, slice.call(arguments, 1)
 
     fun = (config = defaultConfig) ->
         return new Factory(config)
