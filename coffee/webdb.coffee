@@ -230,6 +230,8 @@
             schema = config.schema
             storeName = Object.keys(schema)[0]
             records = slice.call arguments
+            successIDs = []
+            errorIDs = []
 
             dtd = deferred()
 
@@ -242,45 +244,63 @@
             for record in records
                 fields = Object.keys(record)
                 qmarks = @_qmarks(fields.length)
-                sql = "INSERT INTO #{ storeName } (#{ fields.join(',') }) VALUES (#{ qmarks })"
+                sql = "INSERT INTO #{ storeName } (#{ fields.join(',') }) VALUES (#{ qmarks });"
                 values = []
                 values.push record[f] for f in fields
 
                 sqlStrings.push sql
-                Array::push.apply sqlValues, values
+                sqlValues.push values
 
-            
             # qmarks.push "?" for i in [0...fields.length]
             # values = []
             # values.push record[f] for f in fields
 
-            @_db.transaction (transaction) ->
+            doTransaction = (transaction) ->
                 
                 successCallback = ->
-                    dtd.resolve(record)
+                    rs = arguments[1]
+                    successIDs.push rs.insertId
+                    dtd.notify()
+                    return
 
                 errorCallback = ->
-                    error = arguments[1]
-                    if error.code is error.CONSTRAINT_ERR
-                        that
-                        .get(record.id)
-                        .done (result) ->
-                            dtd.resolve(result)
-                            return
+                    console.log arguments[1]
+                    # error = arguments[1]
+                    # if error.code is error.CONSTRAINT_ERR
+                    #     that
+                    #     .get(record.id)
+                    #     .done (result) ->
+                    #         dtd.resolve(result)
+                    #         return
 
-                        .fail ->
-                            dtd.reject()
-                            return
+                    #     .fail ->
+                    #         dtd.reject()
+                    #         return
 
-                    else
-                        dtd.reject()
+                    # else
+                    #     dtd.reject()
 
-                transaction.executeSql(
-                    sqlStrings.join(';')
-                    sqlValues
-                    successCallback
-                    errorCallback
-                )
+                for i in [0...sqlStrings.length]
+
+                    sql = sqlStrings[i]
+                    value = sqlValues[i]
+                    transaction.executeSql(
+                        sql
+                        value
+                        successCallback
+                        errorCallback
+                    )
+                return
+
+            transactionSuccess = ->
+                dtd.resolve(successIDs)
+                return
+
+            transactionError = ->
+                dtd.reject()
+                return
+
+            @_db.transaction doTransaction, transactionError, transactionSuccess
 
             return dtd
 

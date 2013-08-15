@@ -83,6 +83,7 @@ module.exports = function(grunt) {
             },
             test: {
                 options: {
+                    hostname: '*',
                     keepalive: true
                 }
             }

@@ -258,47 +258,58 @@ var __hasProp = {}.hasOwnProperty,
     };
 
     WebSQL.prototype.create = function() {
-      var config, dtd, f, fields, i, qmarks, record, schema, storeName, that, values, _i, _j, _len, _ref2;
+      var config, doTransaction, dtd, errorIDs, f, fields, qmarks, record, records, schema, sql, sqlStrings, sqlValues, storeName, successIDs, that, transactionError, transactionSuccess, values, _i, _j, _len, _len1;
       that = this;
       config = this.config;
       schema = config.schema;
       storeName = Object.keys(schema)[0];
-      record = arguments[0];
+      records = slice.call(arguments);
+      successIDs = [];
+      errorIDs = [];
       dtd = deferred();
-      if (!record) {
+      if (!records) {
         dtd.reject();
         return dtd;
       }
-      fields = Object.keys(record);
-      qmarks = [];
-      for (i = _i = 0, _ref2 = fields.length; 0 <= _ref2 ? _i < _ref2 : _i > _ref2; i = 0 <= _ref2 ? ++_i : --_i) {
-        qmarks.push("?");
+      sqlStrings = [];
+      sqlValues = [];
+      for (_i = 0, _len = records.length; _i < _len; _i++) {
+        record = records[_i];
+        fields = Object.keys(record);
+        qmarks = this._qmarks(fields.length);
+        sql = "INSERT INTO " + storeName + " (" + (fields.join(',')) + ") VALUES (" + qmarks + ");";
+        values = [];
+        for (_j = 0, _len1 = fields.length; _j < _len1; _j++) {
+          f = fields[_j];
+          values.push(record[f]);
+        }
+        sqlStrings.push(sql);
+        sqlValues.push(values);
       }
-      values = [];
-      for (_j = 0, _len = fields.length; _j < _len; _j++) {
-        f = fields[_j];
-        values.push(record[f]);
-      }
-      this._db.transaction(function(transaction) {
-        var errorCallback, successCallback;
+      doTransaction = function(transaction) {
+        var errorCallback, i, successCallback, value, _k, _ref2;
         successCallback = function() {
-          return dtd.resolve(record);
+          var rs;
+          rs = arguments[1];
+          successIDs.push(rs.insertId);
+          dtd.notify();
         };
         errorCallback = function() {
-          var error;
-          error = arguments[1];
-          if (error.code === error.CONSTRAINT_ERR) {
-            return that.get(record.id).done(function(result) {
-              dtd.resolve(result);
-            }).fail(function() {
-              dtd.reject();
-            });
-          } else {
-            return dtd.reject();
-          }
+          return console.log(arguments[1]);
         };
-        return transaction.executeSql("INSERT INTO " + storeName + " (" + (fields.join(',')) + ") VALUES (" + qmarks + ");", values, successCallback, errorCallback);
-      });
+        for (i = _k = 0, _ref2 = sqlStrings.length; 0 <= _ref2 ? _k < _ref2 : _k > _ref2; i = 0 <= _ref2 ? ++_k : --_k) {
+          sql = sqlStrings[i];
+          value = sqlValues[i];
+          transaction.executeSql(sql, value, successCallback, errorCallback);
+        }
+      };
+      transactionSuccess = function() {
+        dtd.resolve(successIDs);
+      };
+      transactionError = function() {
+        dtd.reject();
+      };
+      this._db.transaction(doTransaction, transactionError, transactionSuccess);
       return dtd;
     };
 
