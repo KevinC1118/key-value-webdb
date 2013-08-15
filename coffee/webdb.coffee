@@ -229,19 +229,30 @@
             config = @config
             schema = config.schema
             storeName = Object.keys(schema)[0]
-            record = arguments[0]
+            records = slice.call arguments
 
             dtd = deferred()
 
-            if !record
+            if !records
                 dtd.reject()
                 return dtd
 
-            fields = Object.keys(record)
-            qmarks = []
-            qmarks.push "?" for i in [0...fields.length]
-            values = []
-            values.push record[f] for f in fields
+            sqlStrings = []
+            sqlValues = []
+            for record in records
+                fields = Object.keys(record)
+                qmarks = @_qmarks(fields.length)
+                sql = "INSERT INTO #{ storeName } (#{ fields.join(',') }) VALUES (#{ qmarks })"
+                values = []
+                values.push record[f] for f in fields
+
+                sqlStrings.push sql
+                Array::push.apply sqlValues, values
+
+            
+            # qmarks.push "?" for i in [0...fields.length]
+            # values = []
+            # values.push record[f] for f in fields
 
             @_db.transaction (transaction) ->
                 
@@ -265,8 +276,8 @@
                         dtd.reject()
 
                 transaction.executeSql(
-                    "INSERT INTO #{ storeName } (#{ fields.join(',') }) VALUES (#{ qmarks });"
-                    values
+                    sqlStrings.join(';')
+                    sqlValues
                     successCallback
                     errorCallback
                 )
